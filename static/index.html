@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Resume Engine — محرك السيرة الذاتية</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;900&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0D0D0D;
+    --surface: #161616;
+    --surface2: #1E1E1E;
+    --border: #2A2A2A;
+    --accent: #C8A96E;
+    --accent2: #E8C97E;
+    --text: #F0EDE8;
+    --text-muted: #888;
+    --success: #4CAF50;
+    --error: #E57373;
+    --radius: 12px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Cairo', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Background grain */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .wrapper {
+    position: relative;
+    z-index: 1;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 40px 20px 80px;
+  }
+
+  /* HEADER */
+  .hero {
+    text-align: center;
+    padding: 60px 0 50px;
+  }
+
+  .hero-badge {
+    display: inline-block;
+    background: linear-gradient(135deg, #C8A96E22, #C8A96E11);
+    border: 1px solid #C8A96E44;
+    color: var(--accent);
+    font-size: 12px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    padding: 6px 18px;
+    border-radius: 50px;
+    margin-bottom: 24px;
+  }
+
+  .hero h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(36px, 7vw, 64px);
+    font-weight: 700;
+    line-height: 1.1;
+    background: linear-gradient(135deg, #F0EDE8 0%, #C8A96E 50%, #E8C97E 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 16px;
+  }
+
+  .hero p {
+    color: var(--text-muted);
+    font-size: 16px;
+    font-weight: 300;
+    max-width: 500px;
+    margin: 0 auto;
+    line-height: 1.8;
+  }
+
+  /* STATS */
+  .stats {
+    display: flex;
+    justify-content: center;
+    gap: 40px;
+    margin: 40px 0;
+    padding: 24px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+
+  .stat { text-align: center; }
+  .stat-num {
+    font-size: 28px;
+    font-weight: 900;
+    color: var(--accent);
+    display: block;
+  }
+  .stat-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-weight: 300;
+  }
+
+  /* MAIN CARD */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 32px;
+    margin-bottom: 20px;
+  }
+
+  .card-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--accent);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .card-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* TEXTAREA */
+  .textarea-wrap { position: relative; }
+
+  textarea {
+    width: 100%;
+    min-height: 240px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: 'Cairo', sans-serif;
+    font-size: 14px;
+    line-height: 1.8;
+    padding: 16px;
+    resize: vertical;
+    transition: border-color 0.3s;
+    direction: rtl;
+  }
+
+  textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px #C8A96E18;
+  }
+
+  textarea::placeholder { color: #555; }
+
+  .char-count {
+    position: absolute;
+    bottom: 10px;
+    left: 14px;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  /* TEMPLATE SELECTOR */
+  .templates {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .template-card {
+    border: 2px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+    cursor: pointer;
+    transition: all 0.25s;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: var(--surface2);
+  }
+
+  .template-card:hover {
+    border-color: #C8A96E55;
+    background: #C8A96E08;
+  }
+
+  .template-card.active {
+    border-color: var(--accent);
+    background: #C8A96E12;
+    box-shadow: 0 0 0 1px var(--accent);
+  }
+
+  .template-icon {
+    width: 44px;
+    height: 56px;
+    border-radius: 4px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .template-icon.blue { background: linear-gradient(135deg, #1B4F72, #2E86C1); }
+  .template-icon.brown { background: linear-gradient(135deg, #7D2E00, #B5451B); }
+
+  .template-info { flex: 1; }
+  .template-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 3px;
+  }
+  .template-desc {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-weight: 300;
+  }
+
+  .template-check {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+
+  .template-card.active .template-check {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #000;
+    font-size: 10px;
+  }
+
+  /* BUTTONS */
+  .btn-row {
+    display: flex;
+    gap: 12px;
+    margin-top: 24px;
+  }
+
+  .btn {
+    padding: 14px 28px;
+    border-radius: 8px;
+    font-family: 'Cairo', sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    border: none;
+    transition: all 0.25s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, #C8A96E, #E8C97E);
+    color: #000;
+    flex: 1;
+    justify-content: center;
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px #C8A96E44;
+  }
+
+  .btn-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .btn-secondary {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 14px 20px;
+  }
+
+  .btn-secondary:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  /* LOADING */
+  .loading-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: #0D0D0Dcc;
+    backdrop-filter: blur(8px);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .loading-overlay.show { display: flex; }
+
+  .spinner {
+    width: 60px;
+    height: 60px;
+    border: 3px solid #C8A96E22;
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.9s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .loading-text {
+    font-size: 16px;
+    color: var(--text-muted);
+    text-align: center;
+    line-height: 1.8;
+  }
+
+  .loading-step {
+    font-size: 14px;
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  /* TOAST */
+  .toast {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 24px;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    z-index: 200;
+    transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    min-width: 280px;
+    box-shadow: 0 20px 60px #00000088;
+  }
+
+  .toast.show { transform: translateX(-50%) translateY(0); }
+  .toast.success { border-color: var(--success); }
+  .toast.error { border-color: var(--error); }
+
+  /* PREVIEW */
+  .preview-panel {
+    display: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 28px;
+    margin-top: 20px;
+    animation: fadeUp 0.4s ease;
+  }
+
+  .preview-panel.show { display: block; }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .preview-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  .preview-item {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+  }
+
+  .preview-label {
+    font-size: 10px;
+    color: var(--accent);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+    font-weight: 600;
+  }
+
+  .preview-value {
+    font-size: 14px;
+    color: var(--text);
+    line-height: 1.6;
+  }
+
+  .tag-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+  .tag {
+    background: #C8A96E18;
+    border: 1px solid #C8A96E33;
+    color: var(--accent);
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 20px;
+  }
+
+  /* API KEY INPUT */
+  .api-section {
+    background: #C8A96E08;
+    border: 1px solid #C8A96E33;
+    border-radius: var(--radius);
+    padding: 20px 24px;
+    margin-bottom: 20px;
+  }
+
+  .api-section label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent);
+    display: block;
+    margin-bottom: 10px;
+  }
+
+  .api-input-row { display: flex; gap: 10px; }
+
+  .api-input-row input {
+    flex: 1;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: monospace;
+    font-size: 13px;
+    padding: 10px 14px;
+    direction: ltr;
+  }
+
+  .api-input-row input:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  .btn-save {
+    background: #C8A96E22;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    padding: 10px 18px;
+    cursor: pointer;
+    font-family: 'Cairo', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all 0.2s;
+  }
+  .btn-save:hover { background: var(--accent); color: #000; }
+
+  @media (max-width: 600px) {
+    .templates { grid-template-columns: 1fr; }
+    .preview-grid { grid-template-columns: 1fr; }
+    .stats { gap: 20px; }
+    .btn-row { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrapper">
+  <!-- Hero -->
+  <div class="hero">
+    <div class="hero-badge">✦ مدعوم بالذكاء الاصطناعي</div>
+    <h1>Resume Engine</h1>
+    <p>حوّل نصك الخام إلى سيرة ذاتية احترافية جاهزة للـ ATS في ثوانٍ معدودة</p>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats">
+    <div class="stat">
+      <span class="stat-num">30ث</span>
+      <span class="stat-label">وقت التوليد</span>
+    </div>
+    <div class="stat">
+      <span class="stat-num">2</span>
+      <span class="stat-label">قالب متاح</span>
+    </div>
+    <div class="stat">
+      <span class="stat-num">100%</span>
+      <span class="stat-label">دقة التنسيق</span>
+    </div>
+    <div class="stat">
+      <span class="stat-num">0</span>
+      <span class="stat-label">رفع خارجي</span>
+    </div>
+  </div>
+
+  <!-- API Key -->
+  <div class="api-section">
+    <label>🔑 مفتاح Gemini API</label>
+    <div class="api-input-row">
+      <input type="password" id="apiKey" placeholder="AIzaSy..." autocomplete="off">
+      <button class="btn-save" onclick="saveKey()">حفظ</button>
+    </div>
+  </div>
+
+  <!-- Text Input -->
+  <div class="card">
+    <div class="card-title">📝 بيانات السيرة الذاتية</div>
+    <div class="textarea-wrap">
+      <textarea id="rawText" placeholder="الصق هنا أي نص يحتوي على بياناتك...
+
+مثال:
+اسمي أحمد محمد، مهندس برمجيات عندي 3 سنين خبرة.
+شغلت في شركة XYZ من 2021 لحد 2024 كـ Backend Developer.
+بتعمل APIs بـ Python و Django. خريج هندسة حاسبات 2021.
+بتكلم عربي وانجليزي.
+ايميل: ahmed@email.com  موبايل: 01234567890"></textarea>
+      <span class="char-count" id="charCount">0 حرف</span>
+    </div>
+  </div>
+
+  <!-- Template Selector -->
+  <div class="card">
+    <div class="card-title">🎨 اختر القالب</div>
+    <div class="templates">
+      <div class="template-card active" onclick="selectTemplate('en_modern', this)">
+        <div class="template-icon blue">📄</div>
+        <div class="template-info">
+          <div class="template-name">Modern English</div>
+          <div class="template-desc">تصميم عصري · أزرق كحلي · ATS-Ready</div>
+        </div>
+        <div class="template-check">✓</div>
+      </div>
+      <div class="template-card" onclick="selectTemplate('ar_classic', this)">
+        <div class="template-icon brown">📄</div>
+        <div class="template-info">
+          <div class="template-name">كلاسيك عربي</div>
+          <div class="template-desc">تصميم أنيق · بني ذهبي · RTL كامل</div>
+        </div>
+        <div class="template-check"></div>
+      </div>
+    </div>
+
+    <!-- Buttons -->
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick="doPreview()" id="btnPreview">
+        👁️ معاينة البيانات
+      </button>
+      <button class="btn btn-primary" onclick="doGenerate()" id="btnGenerate">
+        ⚡ توليد السيرة الذاتية
+      </button>
+    </div>
+  </div>
+
+  <!-- Preview Panel -->
+  <div class="preview-panel" id="previewPanel">
+    <div class="card-title">👁️ معاينة البيانات المستخرجة</div>
+    <div id="previewContent"></div>
+  </div>
+</div>
+
+<!-- Loading Overlay -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+  <div class="loading-text">
+    <div class="loading-step" id="loadingStep">جاري تحليل النص...</div>
+    يُرجى الانتظار، الذكاء الاصطناعي يعمل
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast">
+  <span id="toastIcon">✓</span>
+  <span id="toastMsg"></span>
+</div>
+
+<script>
+  let selectedTemplate = 'en_modern';
+
+  // Load saved key
+  window.onload = () => {
+    const saved = localStorage.getItem('gemini_key');
+    if (saved) document.getElementById('apiKey').value = saved;
+  };
+
+  function saveKey() {
+    const key = document.getElementById('apiKey').value.trim();
+    if (!key) return showToast('أدخل الـ API Key أولاً', 'error');
+    localStorage.setItem('gemini_key', key);
+    showToast('✅ تم حفظ الـ API Key', 'success');
+  }
+
+  document.getElementById('rawText').addEventListener('input', function() {
+    document.getElementById('charCount').textContent = this.value.length + ' حرف';
+  });
+
+  function selectTemplate(name, el) {
+    selectedTemplate = name;
+    document.querySelectorAll('.template-card').forEach(c => {
+      c.classList.remove('active');
+      c.querySelector('.template-check').textContent = '';
+    });
+    el.classList.add('active');
+    el.querySelector('.template-check').textContent = '✓';
+  }
+
+  function getKey() {
+    return document.getElementById('apiKey').value.trim() ||
+           localStorage.getItem('gemini_key') || '';
+  }
+
+  async function doPreview() {
+    const text = document.getElementById('rawText').value.trim();
+    if (!text) return showToast('الرجاء إدخال النص أولاً', 'error');
+    const key = getKey();
+    if (!key) return showToast('الرجاء إدخال Gemini API Key', 'error');
+
+    showLoading('جاري تحليل البيانات...');
+    try {
+      const res = await fetch('/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, template: selectedTemplate, api_key: key })
+      });
+      const data = await res.json();
+      hideLoading();
+      if (!res.ok) return showToast(data.error || 'خطأ!', 'error');
+      renderPreview(data.data);
+    } catch(e) {
+      hideLoading();
+      showToast('خطأ في الاتصال بالسيرفر', 'error');
+    }
+  }
+
+  async function doGenerate() {
+    const text = document.getElementById('rawText').value.trim();
+    if (!text) return showToast('الرجاء إدخال النص أولاً', 'error');
+    const key = getKey();
+    if (!key) return showToast('الرجاء إدخال Gemini API Key', 'error');
+
+    const steps = ['🔍 جاري تحليل النص...', '✍️ إعادة الصياغة بـ Action Verbs...', '🎨 تطبيق القالب...', '📄 إنشاء ملف Word...'];
+    let i = 0;
+    showLoading(steps[0]);
+    const interval = setInterval(() => { i++; if(i < steps.length) setLoadingStep(steps[i]); }, 1800);
+
+    try {
+      const res = await fetch('/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, template: selectedTemplate, api_key: key })
+      });
+
+      clearInterval(interval);
+      hideLoading();
+
+      if (!res.ok) {
+        const err = await res.json();
+        return showToast(err.error || 'حدث خطأ', 'error');
+      }
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'CV_Resume.docx';
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast('✅ تم تحميل السيرة الذاتية بنجاح!', 'success');
+    } catch(e) {
+      clearInterval(interval);
+      hideLoading();
+      showToast('خطأ في الاتصال بالسيرفر', 'error');
+    }
+  }
+
+  function renderPreview(d) {
+    const panel = document.getElementById('previewPanel');
+    const content = document.getElementById('previewContent');
+    const skills = (d.skills||[]).map(s => `<span class="tag">${s}</span>`).join('');
+    const langs = (d.languages||[]).map(l => `<span class="tag">${l}</span>`).join('');
+    const exp = (d.experience||[]).map(e =>
+      `<div style="margin-bottom:12px">
+        <strong style="color:var(--accent)">${e.role}</strong> — ${e.company}
+        <div style="font-size:12px;color:var(--text-muted)">${e.period}</div>
+        ${(e.bullets||[]).map(b => `<div style="font-size:12px;margin-top:4px">▸ ${b}</div>`).join('')}
+      </div>`
+    ).join('');
+
+    content.innerHTML = `
+      <div class="preview-grid">
+        <div class="preview-item"><div class="preview-label">الاسم</div><div class="preview-value">${d.name||''}</div></div>
+        <div class="preview-item"><div class="preview-label">المسمى الوظيفي</div><div class="preview-value">${d.title||''}</div></div>
+        <div class="preview-item"><div class="preview-label">البريد الإلكتروني</div><div class="preview-value">${d.email||''}</div></div>
+        <div class="preview-item"><div class="preview-label">الهاتف</div><div class="preview-value">${d.phone||''}</div></div>
+      </div>
+      <div class="preview-item" style="margin-top:12px"><div class="preview-label">الملخص المهني</div><div class="preview-value">${d.summary||''}</div></div>
+      <div class="preview-item" style="margin-top:12px"><div class="preview-label">الخبرات</div><div class="preview-value">${exp}</div></div>
+      <div class="preview-item" style="margin-top:12px"><div class="preview-label">المهارات</div><div class="tag-list">${skills}</div></div>
+      <div class="preview-item" style="margin-top:12px"><div class="preview-label">اللغات</div><div class="tag-list">${langs}</div></div>
+    `;
+    panel.classList.add('show');
+    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function showLoading(msg) {
+    document.getElementById('loadingStep').textContent = msg;
+    document.getElementById('loadingOverlay').classList.add('show');
+    document.getElementById('btnGenerate').disabled = true;
+    document.getElementById('btnPreview').disabled = true;
+  }
+
+  function setLoadingStep(msg) {
+    document.getElementById('loadingStep').textContent = msg;
+  }
+
+  function hideLoading() {
+    document.getElementById('loadingOverlay').classList.remove('show');
+    document.getElementById('btnGenerate').disabled = false;
+    document.getElementById('btnPreview').disabled = false;
+  }
+
+  function showToast(msg, type = 'success') {
+    const t = document.getElementById('toast');
+    document.getElementById('toastMsg').textContent = msg;
+    document.getElementById('toastIcon').textContent = type === 'success' ? '✓' : '✕';
+    t.className = `toast ${type} show`;
+    setTimeout(() => t.classList.remove('show'), 3500);
+  }
+</script>
+</body>
+</html>
