@@ -1,77 +1,145 @@
-import os
-import json
+from flask import Flask, request, jsonify, send_file, send_from_directory
 import requests
+import json
+import os
 import subprocess
-from flask import Flask, render_template, request, send_file, jsonify
+import tempfile
+import time
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static')
 
-# استخراج الـ API Key من متغيرات البيئة
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
 
-def call_gemini(prompt, api_key):
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+def call_gemini(prompt, api_key=None, max_retries=4):
+    key = api_key or GEMINI_API_KEY
     headers = {"Content-Type": "application/json"}
+    params = {"key": key}
     body = {
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-        "generationConfig": {
-            "temperature": 0.3,
-            "maxOutputTokens": 3000,
-            "responseMimeType": "application/json"
-        }
+        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 3000}
     }
-    
-    response = requests.post(url, headers=headers, json=body)
-    if response.status_code != 200:
-        raise Exception(f"Gemini API Error: {response.text}")
-    
-    data = response.json()
-    return data['candidates'][0]['content']['parts'][0]['text']
+    for attempt in range(max_retries):
+        resp = requests.post(GEMINI_URL, headers=headers, params=params, json=body, timeout=60)
+        if resp.status_code == 429:
+            wait_time = 2 ** attempt
+            print(f"Rate limit hit. Retrying in {wait_time} seconds...")
+            time.sleep(wait_time)
+            continue
+        if resp.status_code != 200:
+            print(f"Error response: {resp.text}")
+        resp.raise_for_status()
+        data = resp.json()
+        return data["candidates"][0]["content"]["parts"][0]["text"]
+    raise Exception("فشل الاتصال بالـ API بعد عدة محاولات")
 
-def parse_resume_data(text, api_key):
-    prompt = f"""
-    Extract structured information from the following resume text.
-    Return ONLY a JSON object with these keys:
-    - name
-    - contact (object with phone, email, location, linkedin)
-    - summary
-    - experience (list of objects with title, company, dates, description)
-    - education (list of objects with degree, school, dates)
-    - skills (list of strings)
-    - languages (list of strings)
+def parse_resume_data(raw_text, lang, api_key=None):
+    lang_instruction = "in Arabic" if lang == "ar" else "in English"
+    prompt = f"""You are a professional CV writer. Extract and enhance the following raw resume text.
+Return ONLY a valid JSON object with NO markdown, NO backticks, NO extra text.
 
-    Resume Text:
-    {text}
-    """
+Rewrite all bullet points using strong Action Verbs {lang_instruction}.
+Make descriptions concise and ATS-friendly.
+
+JSON structure:
+{{
+  "name": "Full Name",
+  "title": "Professional Title",
+  "email": "email@example.com",
+  "phone": "+20xxxxxxxxx",
+  "location": "City, Country",
+  "linkedin": "",
+  "summary": "2-3 sentence professional summary {lang_instruction}",
+  "experience": [
+    {{
+      "company": "Company Name",
+      "role": "Job Title",
+      "period": "Jan 2022 - Present",
+      "bullets": ["Achievement 1", "Achievement 2", "Achievement 3"]
+    }}
+  ],
+  "education": [
+    {{
+      "institution": "University Name",
+      "degree": "Bachelor of Science in Computer Science",
+      "year": "2020"
+    }}
+  ],
+  "skills": ["Skill 1", "Skill 2", "Skill 3"],
+  "languages": ["Arabic - Native", "English - Fluent"]
+}}
+
+Raw text to process:
+{raw_text}"""
     result = call_gemini(prompt, api_key)
+    result = result.strip()
+    if result.startswith("```"):
+        result = result.split("```")[1]
+        if result.startswith("json"):
+            result = result[4:]
     return json.loads(result.strip())
 
-@app.route("/", methods=["GET", "POST"])
+@app.route("/")
 def index():
-    if request.method == "POST":
-        resume_text = request.form.get("resume_text")
-        if not resume_text:
-            return "Please provide resume text", 400
-            
-        try:
-            # 1. Parse data using Gemini
-            resume_data = parse_resume_data(resume_text, GEMINI_API_KEY)
-            
-            # 2. Save data to temp file for Node script
-            with open("temp_data.json", "w", encoding="utf-8") as f:
-                json.dump(resume_data, f, ensure_ascii=False)
-            
-            # 3. Call Node script to generate Word doc
-            subprocess.run(["node", "generate_docx.js"], check=True)
-            
-            # 4. Send the file
-            return send_file("output.docx", as_attachment=True, download_name="Resume.docx")
-            
-        except Exception as e:
-            return f"Error: {str(e)}", 500
-            
-    return render_template("index.html")
+    return send_from_directory("static", "index.html")
+
+@app.route("/generate", methods=["POST"])
+def generate():
+    data = request.json
+    raw_text = data.get("text", "").strip()
+    template = data.get("template", "en_modern")
+    api_key = data.get("api_key", "") or GEMINI_API_KEY
+    lang = "ar" if template.startswith("ar") else "en"
+
+    if not raw_text:
+        return jsonify({"error": "الرجاء إدخال نص السيرة الذاتية"}), 400
+    if not api_key:
+        return jsonify({"error": "API Key غير موجود"}), 400
+
+    try:
+        resume_data = parse_resume_data(raw_text, lang, api_key)
+    except Exception as e:
+        return jsonify({"error": f"خطأ في تحليل النص: {str(e)}"}), 500
+
+    try:
+        output_path = generate_docx(resume_data, template)
+    except Exception as e:
+        return jsonify({"error": f"خطأ في إنشاء الملف: {str(e)}"}), 500
+
+    return send_file(output_path, as_attachment=True,
+                     download_name=f"CV_{resume_data.get('name','Resume').replace(' ','_')}.docx",
+                     mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+
+def generate_docx(data, template):
+    script_path = os.path.join(os.path.dirname(__file__), "templates", f"{template}.js")
+    data_json = json.dumps(data, ensure_ascii=False)
+    out_path = os.path.join(tempfile.mkdtemp(), "output.docx")
+    result = subprocess.run(
+        ["node", script_path, data_json, out_path],
+        capture_output=True, text=True, timeout=30
+    )
+    if result.returncode != 0:
+        raise Exception(result.stderr or result.stdout)
+    return out_path
+
+@app.route("/preview", methods=["POST"])
+def preview():
+    data = request.json
+    raw_text = data.get("text", "").strip()
+    template = data.get("template", "en_modern")
+    api_key = data.get("api_key", "") or GEMINI_API_KEY
+    lang = "ar" if template.startswith("ar") else "en"
+
+    if not raw_text:
+        return jsonify({"error": "الرجاء إدخال نص"}), 400
+
+    try:
+        resume_data = parse_resume_data(raw_text, lang, api_key)
+        return jsonify({"success": True, "data": resume_data})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8080))
+    print("🚀 Resume Engine شغال على: http://localhost:5000")
+    port = int(os.environ.get("PORT", 5000))
     app.run(debug=False, host="0.0.0.0", port=port)
