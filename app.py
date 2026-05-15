@@ -15,7 +15,7 @@ def call_gemini(prompt, api_key=None, max_retries=4):
     key = api_key or GEMINI_API_KEY
     headers = {"Content-Type": "application/json"}
     params = {"key": key}
-   body = {
+    body = {
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
         "generationConfig": {
             "temperature": 0.3, 
