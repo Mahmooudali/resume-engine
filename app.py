@@ -15,9 +15,13 @@ def call_gemini(prompt, api_key=None, max_retries=4):
     key = api_key or GEMINI_API_KEY
     headers = {"Content-Type": "application/json"}
     params = {"key": key}
-    body = {
+   body = {
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 3000}
+        "generationConfig": {
+            "temperature": 0.3, 
+            "maxOutputTokens": 3000,
+            "responseMimeType": "application/json"
+        }
     }
     for attempt in range(max_retries):
         resp = requests.post(GEMINI_URL, headers=headers, params=params, json=body, timeout=60)
@@ -72,11 +76,6 @@ JSON structure:
 Raw text to process:
 {raw_text}"""
     result = call_gemini(prompt, api_key)
-    result = result.strip()
-    if result.startswith("```"):
-        result = result.split("```")[1]
-        if result.startswith("json"):
-            result = result[4:]
     return json.loads(result.strip())
 
 @app.route("/")
