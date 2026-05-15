@@ -15,12 +15,53 @@ def call_gemini(prompt, api_key=None, max_retries=4):
     key = api_key or GEMINI_API_KEY
     headers = {"Content-Type": "application/json"}
     params = {"key": key}
+    
+    # تحديد شكل الـ JSON المطلوب (Schema) لضمان عدم حدوث أي أخطاء في التحليل
+    schema = {
+        "type": "OBJECT",
+        "properties": {
+            "name": {"type": "STRING"},
+            "title": {"type": "STRING"},
+            "email": {"type": "STRING"},
+            "phone": {"type": "STRING"},
+            "location": {"type": "STRING"},
+            "linkedin": {"type": "STRING"},
+            "summary": {"type": "STRING"},
+            "experience": {
+                "type": "ARRAY",
+                "items": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "company": {"type": "STRING"},
+                        "role": {"type": "STRING"},
+                        "period": {"type": "STRING"},
+                        "bullets": {"type": "ARRAY", "items": {"type": "STRING"}}
+                    }
+                }
+            },
+            "education": {
+                "type": "ARRAY",
+                "items": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "institution": {"type": "STRING"},
+                        "degree": {"type": "STRING"},
+                        "year": {"type": "STRING"}
+                    }
+                }
+            },
+            "skills": {"type": "ARRAY", "items": {"type": "STRING"}},
+            "languages": {"type": "ARRAY", "items": {"type": "STRING"}}
+        }
+    }
+
     body = {
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
         "generationConfig": {
-            "temperature": 0.3, 
-            "maxOutputTokens": 3000,
-            "responseMimeType": "application/json"
+            "temperature": 0.2, 
+            "maxOutputTokens": 8192,
+            "responseMimeType": "application/json",
+            "responseSchema": schema # إجبار الـ API على الالتزام بهذا الشكل
         }
     }
     for attempt in range(max_retries):
@@ -40,42 +81,21 @@ def call_gemini(prompt, api_key=None, max_retries=4):
 def parse_resume_data(raw_text, lang, api_key=None):
     lang_instruction = "in Arabic" if lang == "ar" else "in English"
     prompt = f"""You are a professional CV writer. Extract and enhance the following raw resume text.
-Return ONLY a valid JSON object with NO markdown, NO backticks, NO extra text.
-
 Rewrite all bullet points using strong Action Verbs {lang_instruction}.
 Make descriptions concise and ATS-friendly.
 
-JSON structure:
-{{
-  "name": "Full Name",
-  "title": "Professional Title",
-  "email": "email@example.com",
-  "phone": "+20xxxxxxxxx",
-  "location": "City, Country",
-  "linkedin": "",
-  "summary": "2-3 sentence professional summary {lang_instruction}",
-  "experience": [
-    {{
-      "company": "Company Name",
-      "role": "Job Title",
-      "period": "Jan 2022 - Present",
-      "bullets": ["Achievement 1", "Achievement 2", "Achievement 3"]
-    }}
-  ],
-  "education": [
-    {{
-      "institution": "University Name",
-      "degree": "Bachelor of Science in Computer Science",
-      "year": "2020"
-    }}
-  ],
-  "skills": ["Skill 1", "Skill 2", "Skill 3"],
-  "languages": ["Arabic - Native", "English - Fluent"]
-}}
-
 Raw text to process:
 {raw_text}"""
+    
     result = call_gemini(prompt, api_key)
+    
+    # تنظيف بسيط احتياطي، مع أن الـ Schema بتضمن JSON سليم
+    result = result.strip()
+    if result.startswith("```"):
+        result = result.split("```")[1]
+        if result.startswith("json"):
+            result = result[4:]
+    
     return json.loads(result.strip())
 
 @app.route("/")
